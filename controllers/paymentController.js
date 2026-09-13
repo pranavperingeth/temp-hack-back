@@ -3,13 +3,19 @@ const { createOrder, verifyPaymentSignature } = require("../services/razorpay");
 
 async function createRazorpayOrder(req, res) {
   try {
-    const { amountPaise, currency, receipt } = req.body;
+    const { memberCount, currency, receipt } = req.body;
 
-    if (!amountPaise || typeof amountPaise !== "number" || amountPaise < 1000 || amountPaise > 10000000) {
+    // Validate memberCount
+    if (!memberCount || typeof memberCount !== "number" || memberCount < 1 || memberCount > 4) {
       return res.status(400).json({
-        error: { code: "VALIDATION_ERROR", message: "amountPaise must be a number between 1000 and 10000000" },
+        error: { code: "VALIDATION_ERROR", message: "memberCount must be a number between 1 and 4" },
       });
     }
+
+    // SERVER-SIDE FEE CALCULATION
+    // e.g. 1 member = ₹500, 2 = ₹1000, 3 = ₹1500, 4 = ₹2000
+    const FEE_PER_MEMBER_PAISE = 50000; 
+    const amountPaise = memberCount * FEE_PER_MEMBER_PAISE;
 
     const order = await createOrder(amountPaise, currency || "INR", receipt);
 
