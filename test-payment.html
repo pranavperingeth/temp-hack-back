@@ -40,8 +40,8 @@
   <div class="card">
     <div class="step">Step 2</div>
     <h2>Create Razorpay Order</h2>
-    <label>Amount (paise)</label>
-    <input id="amount" type="number" value="50000" />
+    <label>Number of Team Members (1-4)</label>
+    <input id="memberCount" type="number" min="1" max="4" value="2" />
     <button class="btn-primary" onclick="createOrder()">Create Order</button>
     <pre id="orderOutput">Click to create an order...</pre>
   </div>
@@ -97,14 +97,14 @@
   }
 
   async function createOrder() {
-    const amount = parseInt(document.getElementById("amount").value);
+    const memberCount = parseInt(document.getElementById("memberCount").value);
     const out = document.getElementById("orderOutput");
     if (!state.token) { out.className = "error"; out.textContent = "Get a token first (Step 1)"; return; }
     try {
       const res = await fetch(`${API}/api/payments/create-order`, {
         method: "POST",
         headers: { "Content-Type": "application/json", "Authorization": `Bearer ${state.token}` },
-        body: JSON.stringify({ amountPaise: amount }),
+        body: JSON.stringify({ memberCount: memberCount }),
       });
       const data = await res.json();
       if (data.orderId) {
