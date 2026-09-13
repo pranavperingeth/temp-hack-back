@@ -1,0 +1,33 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+model Payment {
+  id                  String   @id @default(uuid())
+  razorpayOrderId     String   @unique
+  razorpayPaymentId   String?  @unique
+  amountPaise         Int
+  currency            String   @default("INR")
+  status              String   @default("CREATED")
+  signatureVerified   Boolean  @default(false)
+  rawPayload          Json?
+  createdAt           DateTime @default(now())
+  updatedAt           DateTime @updatedAt
+
+  @@index([razorpayOrderId])
+}
+
+model WebhookEvent {
+  id          String    @id @default(cuid())
+  eventId     String    @unique
+  eventType   String
+  payload     Json
+  processed   Boolean   @default(false)
+  receivedAt  DateTime  @default(now())
+  processedAt DateTime?
+}
