@@ -1,0 +1,213 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Razorpay Payment Test</title>
+  <script src="https://checkout.razorpay.com/v1/checkout.js"></script>
+  <style>
+    * { box-sizing: border-box; margin: 0; padding: 0; }
+    body { font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif; max-width: 700px; margin: 40px auto; padding: 20px; background: #f5f5f5; }
+    .card { background: #fff; border-radius: 12px; padding: 28px; margin-bottom: 20px; box-shadow: 0 2px 8px rgba(0,0,0,0.08); }
+    h2 { margin-bottom: 16px; font-size: 20px; }
+    label { display: block; font-size: 13px; font-weight: 600; margin-bottom: 4px; color: #555; }
+    input { width: 100%; padding: 10px 12px; border: 1px solid #ddd; border-radius: 6px; font-size: 14px; margin-bottom: 12px; }
+    button { padding: 12px 24px; border: none; border-radius: 6px; font-size: 15px; font-weight: 600; cursor: pointer; }
+    .btn-primary { background: #4f46e5; color: #fff; width: 100%; }
+    .btn-primary:hover { background: #4338ca; }
+    .btn-primary:disabled { background: #9ca3af; cursor: not-allowed; }
+    pre { background: #f6f8fa; padding: 16px; border-radius: 8px; overflow-x: auto; font-size: 12px; border: 1px solid #e1e4e8; white-space: pre-wrap; word-break: break-all; }
+    .step { font-size: 12px; color: #999; text-transform: uppercase; letter-spacing: 0.5px; margin-bottom: 8px; }
+    .success { color: #16a34a; font-weight: 600; }
+    .error { color: #dc2626; font-weight: 600; }
+    .row { display: flex; gap: 12px; }
+    .row > div { flex: 1; }
+  </style>
+</head>
+<body>
+
+  <div class="card">
+    <div class="step">Step 1</div>
+    <h2>Get Auth Token</h2>
+    <div class="row">
+      <div><label>Name</label><input id="name" value="Test User" /></div>
+      <div><label>Email</label><input id="email" value="test@example.com" /></div>
+    </div>
+    <button class="btn-primary" onclick="getToken()">Get Token</button>
+    <pre id="tokenOutput">Click to get a dev token...</pre>
+  </div>
+
+  <div class="card">
+    <div class="step">Step 2</div>
+    <h2>Create Razorpay Order</h2>
+    <label>Amount (paise)</label>
+    <input id="amount" type="number" value="50000" />
+    <button class="btn-primary" onclick="createOrder()">Create Order</button>
+    <pre id="orderOutput">Click to create an order...</pre>
+  </div>
+
+  <div class="card">
+    <div class="step">Step 3</div>
+    <h2>Pay with Razorpay Checkout</h2>
+    <button class="btn-primary" id="payBtn" onclick="openCheckout()" disabled>Open Checkout</button>
+    <pre id="payOutput">Complete step 2 first...</pre>
+  </div>
+
+  <div class="card">
+    <div class="step">Step 4</div>
+    <h2>Verify Payment</h2>
+    <button class="btn-primary" id="verifyBtn" onclick="verifyPayment()" disabled>Verify Payment</button>
+    <pre id="verifyOutput">Complete step 3 first...</pre>
+  </div>
+
+  <div class="card">
+    <div class="step">Step 5</div>
+    <h2>Test Webhook (Simulated)</h2>
+    <button class="btn-primary" onclick="simulateWebhook()">Send Fake Webhook</button>
+    <pre id="webhookOutput">Click to simulate a Razorpay webhook event...</pre>
+  </div>
+
+<script>
+  const API = window.location.origin;
+  let state = { token: null, orderId: null, amount: null, paymentId: null, signature: null };
+
+  async function getToken() {
+    const name = document.getElementById("name").value;
+    const email = document.getElementById("email").value;
+    const out = document.getElementById("tokenOutput");
+    try {
+      const res = await fetch(`${API}/api/auth/dev-token`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ name, email }),
+      });
+      const data = await res.json();
+      if (data.token) {
+        state.token = data.token;
+        out.className = "success";
+        out.textContent = `Token obtained!\n\n${data.token}`;
+      } else {
+        out.className = "error";
+        out.textContent = JSON.stringify(data, null, 2);
+      }
+    } catch (e) {
+      out.className = "error";
+      out.textContent = e.message;
+    }
+  }
+
+  async function createOrder() {
+    const amount = parseInt(document.getElementById("amount").value);
+    const out = document.getElementById("orderOutput");
+    if (!state.token) { out.className = "error"; out.textContent = "Get a token first (Step 1)"; return; }
+    try {
+      const res = await fetch(`${API}/api/payments/create-order`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${state.token}` },
+        body: JSON.stringify({ amountPaise: amount }),
+      });
+      const data = await res.json();
+      if (data.orderId) {
+        state.orderId = data.orderId;
+        state.amount = data.amount;
+        state.keyId = data.keyId;
+        out.className = "success";
+        out.textContent = `Order created!\n\nOrder ID: ${data.orderId}\nAmount: ${data.amount} paise\nKey ID: ${data.keyId}`;
+        document.getElementById("payBtn").disabled = false;
+      } else {
+        out.className = "error";
+        out.textContent = JSON.stringify(data, null, 2);
+      }
+    } catch (e) {
+      out.className = "error";
+      out.textContent = e.message;
+    }
+  }
+
+  function openCheckout() {
+    const out = document.getElementById("payOutput");
+    if (!state.orderId) { out.className = "error"; out.textContent = "Create an order first (Step 2)"; return; }
+
+    const options = {
+      key: state.keyId,
+      amount: state.amount,
+      currency: "INR",
+      name: "Tathva Hackathon",
+      description: "Test Payment",
+      order_id: state.orderId,
+      handler: async function (response) {
+        state.paymentId = response.razorpay_payment_id;
+        state.signature = response.razorpay_signature;
+        state.orderId = response.razorpay_order_id;
+        out.className = "success";
+        out.textContent = `Payment successful!\n\nPayment ID: ${response.razorpay_payment_id}\nOrder ID: ${response.razorpay_order_id}\nSignature: ${response.razorpay_signature}`;
+        document.getElementById("verifyBtn").disabled = false;
+      },
+      prefill: {
+        name: document.getElementById("name").value,
+        email: document.getElementById("email").value,
+      },
+      theme: { color: "#4f46e5" },
+      modal: {
+        ondismiss: function () {
+          out.className = "error";
+          out.textContent = "Payment cancelled by user";
+        },
+      },
+    };
+
+    const rzp = new Razorpay(options);
+    rzp.on("payment.failed", function (response) {
+      out.className = "error";
+      out.textContent = `Payment failed!\n\n${JSON.stringify(response.error, null, 2)}`;
+    });
+    rzp.open();
+  }
+
+  async function verifyPayment() {
+    const out = document.getElementById("verifyOutput");
+    if (!state.paymentId) { out.className = "error"; out.textContent = "Complete payment first (Step 3)"; return; }
+    try {
+      const res = await fetch(`${API}/api/payments/verify`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "Authorization": `Bearer ${state.token}` },
+        body: JSON.stringify({
+          razorpayOrderId: state.orderId,
+          razorpayPaymentId: state.paymentId,
+          razorpaySignature: state.signature,
+        }),
+      });
+      const data = await res.json();
+      out.className = data.status === "CAPTURED" ? "success" : "error";
+      out.textContent = JSON.stringify(data, null, 2);
+    } catch (e) {
+      out.className = "error";
+      out.textContent = e.message;
+    }
+  }
+
+  async function simulateWebhook() {
+    const out = document.getElementById("webhookOutput");
+    if (!state.orderId) { out.className = "error"; out.textContent = "Create an order first (Step 2)"; return; }
+    try {
+      const res = await fetch(`${API}/api/webhooks/razorpay`, {
+        method: "POST",
+        headers: { "Content-Type": "application/json", "X-Razorpay-Signature": "fake_signature_for_dev" },
+        body: JSON.stringify({
+          event: "payment.captured",
+          event_id: `evt_dev_${Date.now()}`,
+          payload: { payment: { entity: { order_id: state.orderId, id: state.paymentId || "pay_dev_test" } } },
+        }),
+      });
+      const data = await res.json();
+      out.className = "success";
+      out.textContent = JSON.stringify(data, null, 2) + "\n\nNote: Webhook signature is fake in dev mode. The handler logged the event but skipped signature verification for testing.";
+    } catch (e) {
+      out.className = "error";
+      out.textContent = e.message;
+    }
+  }
+</script>
+
+</body>
+</html>
